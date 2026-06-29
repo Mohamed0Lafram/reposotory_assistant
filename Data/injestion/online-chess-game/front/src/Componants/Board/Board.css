@@ -1,0 +1,31 @@
+
+
+.Board{
+    grid-area: 1/1;
+    display: grid;
+    border : solid black 1px;
+    grid-template-columns: repeat(8,1fr);
+    grid-template-rows: repeat(8,1fr);
+    width: 600px;
+    height: 600px;
+}
+
+.Board div{
+    background-repeat: 'no-repeat';
+    background-size: 'contain';
+    background-position: 'center';
+    width: '75%';
+    height: '75%';
+}
+
+.light{
+    background-color: transparent;
+    border : solid black 1px;
+}
+
+.dark{
+    background-color: brown;
+    border : solid black 1px;
+
+}
+

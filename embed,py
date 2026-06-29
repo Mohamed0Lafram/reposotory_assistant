@@ -1,0 +1,93 @@
+import json
+from pathlib import Path
+from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+
+# ---------- Helper: decide what text to embed ----------
+def extract_text(content):
+    """
+    content can be:
+    - a plain string
+    - a dict (like {"code": "...", "comments": [...]})
+    Return a single string for embedding.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        # Option A: embed the whole dict as a formatted string
+        # return json.dumps(content, indent=2, ensure_ascii=False)
+
+        # Option B: handle the known 'code' + 'comments' case
+        parts = []
+        if "comments" in content:
+            # comments is a list of strings
+            parts.extend(content["comments"])
+        if "code" in content:
+            parts.append(content["code"])
+        if parts:
+            return "\n".join(parts)
+
+        # Fallback: any other dict structure
+        return json.dumps(content, ensure_ascii=False)
+    # fallback for other types (list, number, etc.)
+    return str(content)
+
+# ---------- 1. Load chunks from JSONL ----------
+chunks_file = Path("chunks")
+documents = []
+
+with chunks_file.open("r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        chunk = json.loads(line)
+
+        # Extract the text to embed
+        content_field = chunk.get("content", "")
+        page_text = extract_text(content_field)
+
+        # All other keys become metadata, plus keep the original content
+        metadata = {k: v for k, v in chunk.items() if k != "content"}
+        metadata["_original_content"] = content_field   # preserve for retrieval
+
+        doc = Document(page_content=page_text, metadata=metadata)
+        documents.append(doc)
+
+print(f"Loaded {len(documents)} chunks from '{chunks_file}'")
+
+# ---------- 2. BGE-small embeddings ----------
+embedding_model = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-small-en",
+    model_kwargs={"device": "cpu"},            # "cuda" for GPU
+    encode_kwargs={"normalize_embeddings": True}
+)
+
+# ---------- 3. Build / load ChromaDB ----------
+vectorstore = Chroma.from_documents(
+    documents=documents,
+    embedding=embedding_model,
+    persist_directory="./chroma_bge_db"
+)
+
+# ---------- 4. Retriever ----------
+retriever = vectorstore.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 5}
+)
+
+# ---------- 5. Quick test ----------
+query = "How does the code check if a king is in check?"
+results = retriever.invoke(query)
+
+for i, doc in enumerate(results, 1):
+    print(f"\n--- Result {i} ---")
+    # Print all metadata dynamically
+    for key, value in doc.metadata.items():
+        if key == "_original_content":
+            continue   # skip to keep output clean, but it's there if needed
+        print(f"{key}: {value}")
+    # Show a snippet of the embedded text
+    snippet = doc.page_content[:150].replace("\n", "\\n")
+    print(f"Text: {snippet}...")
