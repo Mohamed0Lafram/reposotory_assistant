@@ -70,7 +70,7 @@ def answer_with_gemini(prompt: str) -> str:
     except ImportError:
         return "Please install google-generativeai: pip install google-generativeai"
 
-    api_key = "AQ.Ab8RN6INfGyyWJRVCiQlPT5z5cnkcPA3MEt2lUmmfWhzkmKYsA"
+    api_key = os.getenv("API_KEY")
     if not api_key:
         return "Please set the GEMINI_API_KEY environment variable."
 
